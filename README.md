@@ -21,11 +21,7 @@ you can install above package by using `python3 -m pip install -r requirements.t
 
 3. Inference
 ```bash
-python3 exp/inference/inference.py  \
-    --loadmodel /path_to_inference_model \
-    --img_path ./img/messi.jpg \
-    --output_path ./img/ \
-    --output_name /output_file_name
+bash inference.sh [filename]
 ```
 
 #
