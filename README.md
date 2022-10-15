@@ -21,7 +21,7 @@ you can install above package by using `python3 -m pip install -r requirements.t
 
 3. Inference
 ```bash
-bash inference.sh [filename]
+bash inference.sh
 ```
 
 #
