@@ -87,7 +87,7 @@ def img_transform(img, transform=None):
     sample = transform(sample)
     return sample
 
-def inference(net, img_path='', output_path='./', output_name='f', use_gpu=True):
+def inference(net, dataroot: str, use_gpu=True):
     '''
 
     :param net:
@@ -108,76 +108,81 @@ def inference(net, img_path='', output_path='./', output_name='f', use_gpu=True)
 
     # multi-scale
     scale_list = [1, 0.5, 0.75, 1.25, 1.5, 1.75]
-    img = read_img(img_path)
-    testloader_list = []
-    testloader_flip_list = []
-    for pv in scale_list:
-        composed_transforms_ts = transforms.Compose([
-            tr.Scale_only_img(pv),
-            tr.Normalize_xception_tf_only_img(),
-            tr.ToTensor_only_img()])
 
-        composed_transforms_ts_flip = transforms.Compose([
-            tr.Scale_only_img(pv),
-            tr.HorizontalFlip_only_img(),
-            tr.Normalize_xception_tf_only_img(),
-            tr.ToTensor_only_img()])
+    fileList = os.listdir(dataroot)
+    imgList = []
+    for file in fileList:
+        imgPath = os.path.join(dataroot, file)
+        imgList.append(imgPath)
+    for image in imgList:
+        img = read_img(image)
+        testloader_list = []
+        testloader_flip_list = []
+        for pv in scale_list:
+            composed_transforms_ts = transforms.Compose([
+                tr.Scale_only_img(pv),
+                tr.Normalize_xception_tf_only_img(),
+                tr.ToTensor_only_img()])
 
-        testloader_list.append(img_transform(img, composed_transforms_ts))
-        # print(img_transform(img, composed_transforms_ts))
-        testloader_flip_list.append(img_transform(img, composed_transforms_ts_flip))
-    # print(testloader_list)
-    start_time = timeit.default_timer()
-    # One testing epoch
-    net.eval()
-    # 1 0.5 0.75 1.25 1.5 1.75 ; flip:
+            composed_transforms_ts_flip = transforms.Compose([
+                tr.Scale_only_img(pv),
+                tr.HorizontalFlip_only_img(),
+                tr.Normalize_xception_tf_only_img(),
+                tr.ToTensor_only_img()])
 
-    for iii, sample_batched in enumerate(zip(testloader_list, testloader_flip_list)):
-        inputs, labels = sample_batched[0]['image'], sample_batched[0]['label']
-        inputs_f, _ = sample_batched[1]['image'], sample_batched[1]['label']
-        inputs = inputs.unsqueeze(0)
-        inputs_f = inputs_f.unsqueeze(0)
-        inputs = torch.cat((inputs, inputs_f), dim=0)
-        if iii == 0:
-            _, _, h, w = inputs.size()
-        # assert inputs.size() == inputs_f.size()
+            testloader_list.append(img_transform(img, composed_transforms_ts))
+            # print(img_transform(img, composed_transforms_ts))
+            testloader_flip_list.append(img_transform(img, composed_transforms_ts_flip))
+        # print(testloader_list)
+        start_time = timeit.default_timer()
+        # One testing epoch
+        net.eval()
+        # 1 0.5 0.75 1.25 1.5 1.75 ; flip:
 
-        # Forward pass of the mini-batch
-        inputs = Variable(inputs, requires_grad=False)
+        for iii, sample_batched in enumerate(zip(testloader_list, testloader_flip_list)):
+            inputs, labels = sample_batched[0]['image'], sample_batched[0]['label']
+            inputs_f, _ = sample_batched[1]['image'], sample_batched[1]['label']
+            inputs = inputs.unsqueeze(0)
+            inputs_f = inputs_f.unsqueeze(0)
+            inputs = torch.cat((inputs, inputs_f), dim=0)
+            if iii == 0:
+                _, _, h, w = inputs.size()
+            # assert inputs.size() == inputs_f.size()
 
-        with torch.no_grad():
-            if use_gpu >= 0:
-                inputs = inputs.cuda()
-            # outputs = net.forward(inputs)
-            outputs = net.forward(inputs, adj1_test.cuda(), adj3_test.cuda(), adj2_test.cuda())
-            outputs = (outputs[0] + flip(flip_cihp(outputs[1]), dim=-1)) / 2
-            outputs = outputs.unsqueeze(0)
+            # Forward pass of the mini-batch
+            inputs = Variable(inputs, requires_grad=False)
 
-            if iii > 0:
-                outputs = F.upsample(outputs, size=(h, w), mode='bilinear', align_corners=True)
-                outputs_final = outputs_final + outputs
-            else:
-                outputs_final = outputs.clone()
-    ################ plot pic
-    predictions = torch.max(outputs_final, 1)[1]
-    results = predictions.cpu().numpy()
-    vis_res = decode_labels(results)
+            with torch.no_grad():
+                if use_gpu >= 0:
+                    inputs = inputs.cuda()
+                # outputs = net.forward(inputs)
+                outputs = net.forward(inputs, adj1_test.cuda(), adj3_test.cuda(), adj2_test.cuda())
+                outputs = (outputs[0] + flip(flip_cihp(outputs[1]), dim=-1)) / 2
+                outputs = outputs.unsqueeze(0)
 
-    parsing_im = Image.fromarray(vis_res[0])
-    parsing_im.save(output_path+'/{}.png'.format(output_name))
-    cv2.imwrite(output_path+'/{}_gray.png'.format(output_name), results[0, :, :])
+                if iii > 0:
+                    outputs = F.upsample(outputs, size=(h, w), mode='bilinear', align_corners=True)
+                    outputs_final = outputs_final + outputs
+                else:
+                    outputs_final = outputs.clone()
+        ################ plot pic
+        predictions = torch.max(outputs_final, 1)[1]
+        results = predictions.cpu().numpy()
+        vis_res = decode_labels(results)
 
-    end_time = timeit.default_timer()
-    print('time used for the multi-scale image inference' + ' is :' + str(end_time - start_time))
+        parsing_im = Image.fromarray(vis_res[0])
+        parsing_im.save(f"{image}.png")
+        cv2.imwrite(f"{image}_gray.png", results[0, :, :])
+
+        end_time = timeit.default_timer()
+        print('time used for the multi-scale image inference' + ' is :' + str(end_time - start_time))
 
 if __name__ == '__main__':
     '''argparse begin'''
     parser = argparse.ArgumentParser()
     # parser.add_argument('--loadmodel',default=None,type=str)
     parser.add_argument('--loadmodel', default='', type=str)
-    parser.add_argument('--img_path', default='', type=str)
-    parser.add_argument('--output_path', default='', type=str)
-    parser.add_argument('--output_name', default='', type=str)
+    parser.add_argument('--dataroot', default='', type=str)
     parser.add_argument('--use_gpu', default=1, type=int)
     opts = parser.parse_args()
 
@@ -199,5 +204,8 @@ if __name__ == '__main__':
         use_gpu = False
         raise RuntimeError('must use the gpu!!!!')
 
-    inference(net=net, img_path=opts.img_path,output_path=opts.output_path , output_name=opts.output_name, use_gpu=use_gpu)
-
+    inference(
+        net=net,
+        dataroot=opts.dataroot,
+        use_gpu=use_gpu
+    )
