@@ -1,0 +1,15 @@
+version: "3"
+services:
+  graphonomy:
+    container_name: graphonomy
+    image: pastagan_plus_plus:0.0.1
+    volumes:
+      - ../:/Projects
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+    runtime: nvidia
+    environment:
+      - DISPLAY=$DISPLAY
+      - NVIDIA_VISIBLE_DEVICES=all
+    network_mode: "host"
+    working_dir: /Projects/
+    tty: true
